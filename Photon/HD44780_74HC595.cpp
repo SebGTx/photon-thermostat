@@ -64,6 +64,9 @@ void HD44780_74HC595::begin(int SRDataPin, int SRNextValuePin, int SRValidatePin
 void HD44780_74HC595::print(String value) {
   for (int i = 0; i < value.length(); i++){
     switch (value.charAt(i)) {
+      case '%': LCDdata(LCD_PER); break;
+      case ',': LCDdata(LCD_VIR); break;
+      case '.': LCDdata(LCD_PNT); break;
       case '/': LCDdata(LCD_SLA); break;
       case '0': LCDdata(LCD_0); break;
       case '1': LCDdata(LCD_1); break;

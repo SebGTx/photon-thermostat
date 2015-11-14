@@ -12,7 +12,7 @@
  Created July 2015
  by Sébastien Gellet
 
- */
+*/
 
 #ifndef _HD44780_74HC595_H
 #define _HD44780_74HC595_H
@@ -31,6 +31,9 @@
 #define LCD_MOVECURSOR    0x80
 
 // Data
+#define LCD_PER  0x25
+#define LCD_VIR  0x2C
+#define LCD_PNT  0x2E
 #define LCD_SLA  0x2F
 #define LCD_0    0x30
 #define LCD_1    0x31

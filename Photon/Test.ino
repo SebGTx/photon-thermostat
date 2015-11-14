@@ -1,12 +1,20 @@
 #include "HD44780_74HC595.h"
+#include "DHT.h"
 
 #define DATE_POS 0
 #define TIME_POS 15
 #define TEMP_POS 84
+#define HUMI_POS 96
 #define ONE_DAY_MILLIS (24 * 60 * 60 * 1000)
-#define SCREEN_TIME_AWAKE 30
+#define ONE_HOUR_MILLIS (60 * 60 * 1000)
+#define ONE_MIN_MILLIS (60 * 1000)
+#define SCREEN_TIME_AWAKE 60
 unsigned long lastSync = millis();
+unsigned long lastSensor = millis() - ONE_DAY_MILLIS;
+int screen_disable = D6;
+int wakeupbutton = D7;
 
+DHT dht = DHT(A0, DHT22);
 HD44780_74HC595 lcd = HD44780_74HC595();
 
 STARTUP(startup());
@@ -14,40 +22,42 @@ STARTUP(startup());
 // Value stored in backup ram
 retained String lastTime;
 retained String lastDay;
-retained float lastTemperature;
+retained String lastTemperature;
+retained String lastHumidity;
 retained String lastTemp;
 
 void startup() {
   System.enableFeature(FEATURE_RETAINED_MEMORY);
 
-  Time.zone(+2);
+  Time.zone(+1);
 
   //lcd.begin(LCD_SIZE_4x20);
 }
 
+// Volatile value
 boolean screenState = true;
 boolean wakeUpButton = false;
 time_t sleepScreenTime;
 
 void setup() {
   Serial.begin(9600);
-  Serial.println("Photonic_Blaster Serial Port is working!");
+  Serial.println("Photon Serial Port is working!");
 
+  dht.begin();
   lcd.begin(LCD_SIZE_4x20);
 
-  pinMode(D7, OUTPUT);
-  digitalWrite(D7, HIGH);
-  pinMode(D6, INPUT);
+  pinMode(screen_disable, OUTPUT);
+  digitalWrite(screen_disable, HIGH);
+  pinMode(wakeupbutton, INPUT);
 
   Particle.function("movecur", moveFromWeb);
   Particle.function("print", printFromWeb);
   Particle.function("clear", clearFromWeb);
-  Particle.function("temp", writeTemp);
 
   sleepScreenTime = Time.now() + SCREEN_TIME_AWAKE;
 
-  bool success;
-  success = Particle.publish("lastTemperature", String(lastTemperature));
+  //bool success;
+  //success = Particle.publish("lastTemperature", String(lastTemperature));
   /*success = Particle.publish("lastTemperature", lastDay);
   success = Particle.publish("lastTemperature", lastTime);
   success = Particle.publish("lastTemperature", lastTemp);*/
@@ -56,11 +66,11 @@ void setup() {
   Serial.println(lastTemperature);
   Serial.println(lastTemp);*/
 
-  attachInterrupt(D6, changeWakeUpButton, CHANGE);
+  attachInterrupt(wakeupbutton, changeWakeUpButton, CHANGE);
 }
 
 void changeWakeUpButton() {
-  boolean buttonState = digitalRead(D6);
+  boolean buttonState = digitalRead(wakeupbutton);
   if (wakeUpButton == buttonState) { return; }
   wakeUpButton = buttonState;
   if (buttonState == true) {
@@ -72,10 +82,10 @@ void tempoAffichage() {
   time_t maintenant = Time.now();
   if (maintenant >= sleepScreenTime) {
     lcd.LCDonoff(false);
-    digitalWrite(D7, LOW);
+    digitalWrite(screen_disable, LOW);
   } else {
     lcd.LCDonoff(true);
-    digitalWrite(D7, HIGH);
+    digitalWrite(screen_disable, HIGH);
   }
 }
 
@@ -103,6 +113,54 @@ void printTime(int position) {
   }
 }
 
+bool printTemp(int position) {
+  uint8_t tmppos = position;
+  float t = dht.readTemperature();
+  Serial.println(t);
+
+  if (t==NAN) {
+    return false;
+  } else {
+    String strTemp(t, 1);
+    if (strTemp != lastTemperature) {
+      lastTemperature = strTemp;
+      uint8_t command = LCD_MOVECURSOR | tmppos;
+      lcd.LCDcommand(command);
+      String temperature = "TEMP:" + strTemp;
+      lcd.print(temperature);
+      lcd.LCDdata(LCD_DEG);
+      // Publish new Value
+      bool success;
+      success = Particle.publish("lastTemperature", strTemp);
+    }
+    return true;
+  }
+}
+
+bool printHumidity(int position) {
+  uint8_t tmppos = position;
+  float h = dht.readHumidity();
+  Serial.println(h);
+
+  if (h==NAN) {
+    return false;
+  } else {
+    String strHumidity(h, 0);
+    if (strHumidity != lastHumidity) {
+      lastHumidity = strHumidity;
+      uint8_t command = LCD_MOVECURSOR | tmppos;
+      lcd.LCDcommand(command);
+      String humidity = "HUMI:" + strHumidity;
+      lcd.print(humidity);
+      lcd.LCDdata(LCD_PER);
+      // Publish new Value
+      bool success;
+      success = Particle.publish("lastHumidity", strHumidity);
+    }
+    return true;
+  }
+}
+
 void clearScreen() {
   uint8_t command = LCD_CLEARDISPLAY;
   lcd.LCDcommand(command);
@@ -120,13 +178,23 @@ void loop() {
   // Get Now Date And Time
   printDate(DATE_POS);
   printTime(TIME_POS);
+  // Temp and humidity every one minute
+  if (millis() - lastSensor > ONE_MIN_MILLIS) {
+    // Get Temperature and humidity
+    bool tempSuccess = printTemp(TEMP_POS);
+    bool humiSuccess = printHumidity(HUMI_POS);
+    if (tempSuccess && humiSuccess) { lastSensor = millis(); } else {
+      bool success;
+      success = Particle.publish("Get Humidity or Temperature", "Failed");
+    }
+  }
+  // Tempo Extinction Affichage
   tempoAffichage();
-  //int tempValue = lastTemperature * 10;
-  //writeTemp(String(tempValue/10));
+
   /*Serial.println(lastDay);
   Serial.println(lastTime);
   Serial.println(lastTemperature);
-  Serial.println(lastTemp);*/
+  Serial.println(lastHumidity);*/
 
   delay(1000);
 }
@@ -150,19 +218,5 @@ int clearFromWeb(String value) {
   bool success;
   success = Particle.publish("clearFromWeb", value);
   clearScreen();
-  return true;
-}
-
-int writeTemp(String value) {
-  float newTemperature = value.toFloat();
-  if (lastTemperature == newTemperature) { return true; }
-  lastTemperature = newTemperature;
-  bool success;
-  success = Particle.publish("lastTemperature", String(lastTemperature));
-  uint8_t command = LCD_MOVECURSOR | TEMP_POS;
-  lcd.LCDcommand(command);
-  String temperature = "TEMP:" + value;
-  lcd.print(temperature);
-  lcd.LCDdata(LCD_DEG);
   return true;
 }
