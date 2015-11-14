@@ -65,7 +65,6 @@ void HD44780_74HC595::begin(int SRDataPin, int SRNextValuePin, int SRValidatePin
 }
 
 void HD44780_74HC595::print(String value) {
-  if (LCDOn == false) { return; }
   for (int i = 0; i < value.length(); i++){
     uint8_t charCode = value.charAt(i);
     uint8_t shiftCode7 = charCode >> 7;
