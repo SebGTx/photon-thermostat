@@ -9,6 +9,9 @@ HD44780_74HC595::HD44780_74HC595() {
   _LCDValidatePin = D5;
   _LCDSize = LCD_SIZE_2x16;
   _LCDDisplayMode = LCD_DISPLAYON;
+  _LCDWait = false;
+
+  LCDOn = true;
 }
 
 void HD44780_74HC595::begin() {
@@ -32,7 +35,7 @@ void HD44780_74HC595::begin() {
   SRreset();
 
   // Wait 50ms
-  delay(50);
+  delay(15);
 
   // Init LCD
   LCDcommand(_LCDSize);
@@ -62,93 +65,40 @@ void HD44780_74HC595::begin(int SRDataPin, int SRNextValuePin, int SRValidatePin
 }
 
 void HD44780_74HC595::print(String value) {
+  if (LCDOn == false) { return; }
   for (int i = 0; i < value.length(); i++){
-    switch (value.charAt(i)) {
-      case '%': LCDdata(LCD_PER); break;
-      case ',': LCDdata(LCD_VIR); break;
-      case '.': LCDdata(LCD_PNT); break;
-      case '/': LCDdata(LCD_SLA); break;
-      case '0': LCDdata(LCD_0); break;
-      case '1': LCDdata(LCD_1); break;
-      case '2': LCDdata(LCD_2); break;
-      case '3': LCDdata(LCD_3); break;
-      case '4': LCDdata(LCD_4); break;
-      case '5': LCDdata(LCD_5); break;
-      case '6': LCDdata(LCD_6); break;
-      case '7': LCDdata(LCD_7); break;
-      case '8': LCDdata(LCD_8); break;
-      case '9': LCDdata(LCD_9); break;
-      case ':': LCDdata(LCD_DP); break;
-      case ';': LCDdata(LCD_PV); break;
-      case '<': LCDdata(LCD_INF); break;
-      case '=': LCDdata(LCD_EGA); break;
-      case '>': LCDdata(LCD_SUP); break;
-      case '?': LCDdata(LCD_INT); break;
-      case '@': LCDdata(LCD_ARO); break;
-      case 'A': LCDdata(LCD_A); break;
-      case 'B': LCDdata(LCD_B); break;
-      case 'C': LCDdata(LCD_C); break;
-      case 'D': LCDdata(LCD_D); break;
-      case 'E': LCDdata(LCD_E); break;
-      case 'F': LCDdata(LCD_F); break;
-      case 'G': LCDdata(LCD_G); break;
-      case 'H': LCDdata(LCD_H); break;
-      case 'I': LCDdata(LCD_I); break;
-      case 'J': LCDdata(LCD_J); break;
-      case 'K': LCDdata(LCD_K); break;
-      case 'L': LCDdata(LCD_L); break;
-      case 'M': LCDdata(LCD_M); break;
-      case 'N': LCDdata(LCD_N); break;
-      case 'O': LCDdata(LCD_O); break;
-      case 'P': LCDdata(LCD_P); break;
-      case 'Q': LCDdata(LCD_Q); break;
-      case 'R': LCDdata(LCD_R); break;
-      case 'S': LCDdata(LCD_S); break;
-      case 'T': LCDdata(LCD_T); break;
-      case 'U': LCDdata(LCD_U); break;
-      case 'V': LCDdata(LCD_V); break;
-      case 'W': LCDdata(LCD_W); break;
-      case 'X': LCDdata(LCD_X); break;
-      case 'Y': LCDdata(LCD_Y); break;
-      case 'Z': LCDdata(LCD_Z); break;
-      case 'a': LCDdata(LCD_a); break;
-      case 'b': LCDdata(LCD_b); break;
-      case 'c': LCDdata(LCD_c); break;
-      case 'd': LCDdata(LCD_d); break;
-      case 'e': LCDdata(LCD_e); break;
-      case 'f': LCDdata(LCD_f); break;
-      case 'g': LCDdata(LCD_g); break;
-      case 'h': LCDdata(LCD_h); break;
-      case 'i': LCDdata(LCD_i); break;
-      case 'j': LCDdata(LCD_j); break;
-      case 'k': LCDdata(LCD_k); break;
-      case 'l': LCDdata(LCD_l); break;
-      case 'm': LCDdata(LCD_m); break;
-      case 'n': LCDdata(LCD_n); break;
-      case 'o': LCDdata(LCD_o); break;
-      case 'p': LCDdata(LCD_p); break;
-      case 'q': LCDdata(LCD_q); break;
-      case 'r': LCDdata(LCD_r); break;
-      case 's': LCDdata(LCD_s); break;
-      case 't': LCDdata(LCD_t); break;
-      case 'u': LCDdata(LCD_u); break;
-      case 'v': LCDdata(LCD_v); break;
-      case 'w': LCDdata(LCD_w); break;
-      case 'x': LCDdata(LCD_x); break;
-      case 'y': LCDdata(LCD_y); break;
-      case 'z': LCDdata(LCD_z); break;
-      case ' ': LCDdata(LCD_SPC); break;
-      case '°': LCDdata(LCD_DEG); break;
-      default: LCDdata(LCD_INT);
+    uint8_t charCode = value.charAt(i);
+    uint8_t shiftCode7 = charCode >> 7;
+    uint8_t shiftCode5 = charCode >> 5;
+    if (shiftCode7 == 0x00) {
+      // 1 octet UTF-8 Char (https://fr.wikipedia.org/wiki/UTF-8)
+      // ASCII table from "Exclamation mark" to "Closing brace"
+      if ((charCode >= 0x20) && (charCode <= 0x7D)) {
+        LCDdata(charCode);
+      } else {
+        if (HD44780_74HC595_SerialDebug) { Serial.println("[HD44780_74HC595.cpp] print(" + String(charCode, HEX) + ") non géré"); }
+      }
+    } else if (shiftCode5 == 0x06) {
+      // 2 octets UTF-8 Char
+      uint16_t UTF8Hex = charCode << 8;
+      i++;
+      UTF8Hex = UTF8Hex | ((uint16_t)value.charAt(i));
+      switch (UTF8Hex) {
+        case 0xC2B0: LCDdata(LCD_DEG); break;
+        default:
+          if (HD44780_74HC595_SerialDebug) { Serial.println("[HD44780_74HC595.cpp] print(" + String(UTF8Hex, HEX) + ") non géré"); }
+      }
     }
   }
 }
 
-void HD44780_74HC595::LCDonoff(boolean value){
+void HD44780_74HC595::LCDonoff(bool value){
   if (value == true) {
     LCDcommand(_LCDDisplayMode);
+    LCDOn = true;
   } else {
     LCDcommand(LCD_DISPLAYOFF);
+    LCDOn = false;
   }
 }
 
@@ -156,26 +106,29 @@ void HD44780_74HC595::SRreset() {
   // Reset 74HC595
   // Enable reset Pin
   digitalWrite(_SRResetPin, LOW);
-  delayMicroseconds(10);
+  delayMicroseconds(1);
 
   // One clock for reset
   digitalWrite(_SRValidatePin, HIGH);
-  delayMicroseconds(10);
+  delayMicroseconds(1);
   digitalWrite(_SRValidatePin, LOW);
-  delayMicroseconds(10);
+  //delayMicroseconds(1);
 
   // Disable reset Pin
   digitalWrite(_SRResetPin, HIGH);
-  delayMicroseconds(10);
+  delayMicroseconds(1);
 }
 
 void HD44780_74HC595::LCDcommand(uint8_t value) {
+  while (_LCDWait == true) { delayMicroseconds(100); }
+  _LCDWait = true;
+  if (HD44780_74HC595_SerialDebug) { Serial.println("[HD44780_74HC595.cpp] LCDcommand(" + String(value, HEX) + ") Begin"); }
   // Reset 74HC595
   SRreset();
 
   // Register Select = Command
   digitalWrite(_LCDRegisterSelectPin, LOW);
-  delayMicroseconds(10);
+  delayMicroseconds(1);
 
   // Send value
   shiftOut(_SRDataPin, _SRNextValuePin, MSBFIRST, value);
@@ -185,16 +138,21 @@ void HD44780_74HC595::LCDcommand(uint8_t value) {
   digitalWrite(_LCDValidatePin, HIGH);
   delayMicroseconds(40);
   digitalWrite(_LCDValidatePin, LOW);
-  delay(10);
+  delayMicroseconds(700);
+  if (HD44780_74HC595_SerialDebug) { Serial.println("[HD44780_74HC595.cpp] LCDcommand(" + String(value, HEX) + ") End"); }
+  _LCDWait = false;
 }
 
 void HD44780_74HC595::LCDdata(uint8_t value) {
+  while (_LCDWait == true) { delayMicroseconds(100); }
+  _LCDWait = true;
+  if (HD44780_74HC595_SerialDebug) { Serial.println("[HD44780_74HC595.cpp] LCDdata(" + String(value, HEX) + ") Begin"); }
   // Reset 74HC595
   SRreset();
 
   // Register Select = Data
   digitalWrite(_LCDRegisterSelectPin, HIGH);
-  delayMicroseconds(10);
+  delayMicroseconds(1);
 
   // Send value
   shiftOut(_SRDataPin, _SRNextValuePin, MSBFIRST, value);
@@ -204,5 +162,7 @@ void HD44780_74HC595::LCDdata(uint8_t value) {
   digitalWrite(_LCDValidatePin, HIGH);
   delayMicroseconds(40);
   digitalWrite(_LCDValidatePin, LOW);
-  delay(5);
+  delayMicroseconds(50);
+  if (HD44780_74HC595_SerialDebug) { Serial.println("[HD44780_74HC595.cpp] LCDdata(" + String(value, HEX) + ") End"); }
+  _LCDWait = false;
 }

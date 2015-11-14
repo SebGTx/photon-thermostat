@@ -4,13 +4,15 @@
 #define DATE_POS 0
 #define TIME_POS 15
 #define TEMP_POS 84
-#define HUMI_POS 96
+#define HUMI_POS 98
 #define ONE_DAY_MILLIS (24 * 60 * 60 * 1000)
 #define ONE_HOUR_MILLIS (60 * 60 * 1000)
 #define ONE_MIN_MILLIS (60 * 1000)
-#define SCREEN_TIME_AWAKE 60
+#define ONE_SEC_MILLIS (60 * 1000)
+#define SCREEN_TIME_AWAKE 30
 unsigned long lastSync = millis();
 unsigned long lastSensor = millis() - ONE_DAY_MILLIS;
+unsigned long lastHour = millis() - ONE_DAY_MILLIS;
 int screen_disable = D6;
 int wakeupbutton = D7;
 
@@ -66,26 +68,30 @@ void setup() {
   Serial.println(lastTemperature);
   Serial.println(lastTemp);*/
 
-  attachInterrupt(wakeupbutton, changeWakeUpButton, CHANGE);
+  attachInterrupt(wakeupbutton, changeWakeUpButton, RISING);
 }
 
 void changeWakeUpButton() {
-  boolean buttonState = digitalRead(wakeupbutton);
-  if (wakeUpButton == buttonState) { return; }
-  wakeUpButton = buttonState;
-  if (buttonState == true) {
+  //boolean buttonState = digitalRead(wakeupbutton);
+  //if (wakeUpButton == buttonState) { return; }
+  //wakeUpButton = buttonState;
+  //if (buttonState == true) {
     sleepScreenTime = Time.now() + SCREEN_TIME_AWAKE;
-  }
+  //}
 }
 
 void tempoAffichage() {
   time_t maintenant = Time.now();
   if (maintenant >= sleepScreenTime) {
-    lcd.LCDonoff(false);
-    digitalWrite(screen_disable, LOW);
+    if (lcd.LCDOn == true) {
+      lcd.LCDonoff(false);
+      digitalWrite(screen_disable, LOW);
+    }
   } else {
-    lcd.LCDonoff(true);
-    digitalWrite(screen_disable, HIGH);
+    if (lcd.LCDOn == false) {
+      lcd.LCDonoff(true);
+      digitalWrite(screen_disable, HIGH);
+    }
   }
 }
 
@@ -93,8 +99,19 @@ void printDate(int position) {
   // Day change
   uint8_t tmppos = position;
   time_t maintenant = Time.now();
-  String curDay = Time.format(maintenant, "%d/%m/%Y");
-  if (curDay != lastDay) {
+  String curDay;
+  switch (Time.weekday()) {
+    case 1: curDay = "Lu"; break;
+    case 2: curDay = "Ma"; break;
+    case 3: curDay = "Me"; break;
+    case 4: curDay = "Je"; break;
+    case 5: curDay = "Ve"; break;
+    case 6: curDay = "Sa"; break;
+    case 7: curDay = "Di"; break;
+    default: curDay = "";
+  }
+  curDay = curDay + " " + Time.format(maintenant, "%d/%m/%Y");
+  if ((curDay != lastDay) && (curDay != "")) {
     lcd.LCDcommand(LCD_MOVECURSOR | tmppos);
     lcd.print(curDay);
     lastDay = curDay;
@@ -106,7 +123,7 @@ void printTime(int position) {
   uint8_t tmppos = position;
   time_t maintenant = Time.now();
   String curTime = Time.format(maintenant, "%k:%M");
-  if (curTime != lastTime) {
+  if ((curTime != lastTime) && (curTime != "")) {
     lcd.LCDcommand(LCD_MOVECURSOR | tmppos);
     lcd.print(curTime);
     lastTime = curTime;
@@ -116,22 +133,21 @@ void printTime(int position) {
 bool printTemp(int position) {
   uint8_t tmppos = position;
   float t = dht.readTemperature();
-  Serial.println(t);
+  Serial.println("Temperature = " + String(t));
 
   if (t==NAN) {
     return false;
   } else {
     String strTemp(t, 1);
-    if (strTemp != lastTemperature) {
+    if ((strTemp != lastTemperature) && (strTemp != "")) {
       lastTemperature = strTemp;
       uint8_t command = LCD_MOVECURSOR | tmppos;
       lcd.LCDcommand(command);
-      String temperature = "TEMP:" + strTemp;
+      String temperature = "T°:" + strTemp + "°C";
       lcd.print(temperature);
-      lcd.LCDdata(LCD_DEG);
       // Publish new Value
       bool success;
-      success = Particle.publish("lastTemperature", strTemp);
+      success = Particle.publish("Temperature", strTemp);
     }
     return true;
   }
@@ -140,22 +156,21 @@ bool printTemp(int position) {
 bool printHumidity(int position) {
   uint8_t tmppos = position;
   float h = dht.readHumidity();
-  Serial.println(h);
+  Serial.println("Humidity = " + String(h));
 
   if (h==NAN) {
     return false;
   } else {
     String strHumidity(h, 0);
-    if (strHumidity != lastHumidity) {
+    if ((strHumidity != lastHumidity) && (strHumidity != "")) {
       lastHumidity = strHumidity;
       uint8_t command = LCD_MOVECURSOR | tmppos;
       lcd.LCDcommand(command);
-      String humidity = "HUMI:" + strHumidity;
+      String humidity = "HR:" + strHumidity + "%";
       lcd.print(humidity);
-      lcd.LCDdata(LCD_PER);
       // Publish new Value
       bool success;
-      success = Particle.publish("lastHumidity", strHumidity);
+      success = Particle.publish("Humidity", strHumidity);
     }
     return true;
   }
@@ -166,6 +181,8 @@ void clearScreen() {
   lcd.LCDcommand(command);
   printDate(DATE_POS);
   printTime(TIME_POS);
+  bool tempSuccess = printTemp(TEMP_POS);
+  bool humiSuccess = printHumidity(HUMI_POS);
 }
 
 void loop() {
@@ -176,8 +193,10 @@ void loop() {
     lastSync = millis();
   }
   // Get Now Date And Time
-  printDate(DATE_POS);
-  printTime(TIME_POS);
+  if (millis() - lastHour > ONE_SEC_MILLIS) {
+    printDate(DATE_POS);
+    printTime(TIME_POS);
+  }
   // Temp and humidity every one minute
   if (millis() - lastSensor > ONE_MIN_MILLIS) {
     // Get Temperature and humidity
@@ -196,7 +215,7 @@ void loop() {
   Serial.println(lastTemperature);
   Serial.println(lastHumidity);*/
 
-  delay(1000);
+  delay(500);
 }
 
 int printFromWeb(String value) {

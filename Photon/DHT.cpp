@@ -102,8 +102,11 @@ bool DHT::read(void) {
     }
 
     firstreading = false;
-    Serial.print("Currtime: "); Serial.print(currenttime);
-    Serial.print(" Lasttime: "); Serial.print(_lastreadtime);
+    if (DHT_SerialDebug) {
+      Serial.print("[DHT.cpp] ");
+      Serial.print("Currtime: "); Serial.print(currenttime);
+      Serial.print(" Lasttime: "); Serial.println(_lastreadtime);
+    }
     _lastreadtime = millis();
 
     data[0] = data[1] = data[2] = data[3] = data[4] = 0;

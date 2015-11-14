@@ -19,6 +19,10 @@
 
 #include "application.h"
 
+// Debug
+#define DHT_SerialDebug false
+
+
 #define MAXTIMINGS 85
 
 #define cli noInterrupts
