@@ -8,10 +8,9 @@
  please attribute, and SHARE-ALIKE!
 
  Created Novembre 2015
- by wgbartley and jdubrow42
- rewrite by Sébastien Gellet
+ by wgbartley and jdubrow42 Original source : https://gist.github.com/wgbartley/8301123
+ modified by Sébastien Gellet
 
- Original source : https://gist.github.com/wgbartley/8301123
 */
 
 #ifndef _DHT_H
@@ -41,6 +40,8 @@ class DHT {
         uint8_t _pin, _type, _count;
         bool read(void);
         unsigned long _lastreadtime;
+        float _lastReadTemperature;
+        float _lastReadHumidity;
         bool firstreading;
 
     public:

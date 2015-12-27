@@ -19,6 +19,7 @@ void DHT::begin(void) {
 //boolean S == Scale.  True == Farenheit; False == Celcius
 float DHT::readTemperature(bool S) {
     float _f;
+    bool _fr = firstreading;
 
     if (read()) {
         switch (_type) {
@@ -28,7 +29,13 @@ float DHT::readTemperature(bool S) {
                 if(S)
                     _f = convertCtoF(_f);
 
-                return _f;
+                if (_fr || (-10 >= _lastReadTemperature - _f >= 10)) {
+                  _lastReadTemperature = _f;
+                  return _f;
+                } else {
+                  return _lastReadTemperature;
+                }
+
 
 
             case DHT22:
@@ -44,7 +51,12 @@ float DHT::readTemperature(bool S) {
                 if(S)
                     _f = convertCtoF(_f);
 
-                return _f;
+                if (_fr || (-10 >= _lastReadTemperature - _f >= 10)) {
+                  _lastReadTemperature = _f;
+                  return _f;
+                } else {
+                  return _lastReadTemperature;
+                }
         }
     }
 
@@ -63,6 +75,7 @@ float DHT::readHumidity(void) {
         switch (_type) {
             case DHT11:
                 _f = data[0];
+                _lastReadHumidity = _f;
                 return _f;
 
 
@@ -72,6 +85,7 @@ float DHT::readHumidity(void) {
                 _f *= 256;
                 _f += data[1];
                 _f /= 10;
+                _lastReadHumidity = _f;
                 return _f;
         }
     }
